@@ -105,11 +105,21 @@ class _ProactorBasePipeTransport(transports._FlowControlMixin,
             return
         self._closing = True
         self._conn_lost += 1
-        if not self._buffer and self._write_fut is None:
-            self._loop.call_soon(self._call_connection_lost, None)
         if self._read_fut is not None:
             self._read_fut.cancel()
             self._read_fut = None
+        if self._loop.is_closed():
+            # The loop is already closed so connection_lost() can no longer
+            # be scheduled (see gh-114177). Release the socket/handle
+            # synchronously instead of leaking it until garbage collection.
+            # This mirrors what __del__() does for an unclosed transport.
+            if self._sock is not None:
+                self._sock.close()
+                self._sock = None
+            self._called_connection_lost = True
+            return
+        if not self._buffer and self._write_fut is None:
+            self._loop.call_soon(self._call_connection_lost, None)
 
     def __del__(self, _warn=warnings.warn):
         if self._sock is not None:

@@ -1,0 +1,5 @@
+:mod:`asyncio` pipe transports now close their file descriptor synchronously
+when :meth:`!close` is called after the event loop is already closed, instead
+of leaking it until garbage collection. This lets
+:class:`!BaseSubprocessTransport` close its pipes unconditionally and removes
+the workaround added for the original fix of the loop-already-closed crash.

@@ -591,6 +591,15 @@ class _UnixReadPipeTransport(transports.ReadTransport):
 
     def close(self):
         if not self._closing:
+            if self._loop.is_closed():
+                # The loop is already closed so connection_lost() can no longer
+                # be scheduled (see gh-114177). Release the file descriptor
+                # synchronously instead of leaking it until garbage collection.
+                self._closing = True
+                if self._pipe is not None:
+                    self._pipe.close()
+                    self._pipe = None
+                return
             self._close(None)
 
     def __del__(self, _warn=warnings.warn):
@@ -789,6 +798,16 @@ class _UnixWritePipeTransport(transports._FlowControlMixin,
 
     def close(self):
         if self._pipe is not None and not self._closing:
+            if self._loop.is_closed():
+                # The loop is already closed so connection_lost() can no longer
+                # be scheduled (see gh-114177). Release the file descriptor
+                # synchronously instead of leaking it until garbage collection.
+                # Any buffered data is dropped: it can never be flushed once the
+                # loop is gone.
+                self._closing = True
+                self._pipe.close()
+                self._pipe = None
+                return
             # write_eof is all what we needed to close the write pipe
             self.write_eof()
 
